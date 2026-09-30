@@ -129,8 +129,6 @@ def detect_tongue(frame, face_landmarks):
 
 
 def evaluate_meme(pose_landmarks, tongue_detected):
-    """Single source of truth: returns exactly one meme key or a fallback string.
-    Priority order matters when multiple poses could match at once."""
     if tongue_detected:
         return "tongue_out"
     if pose_landmarks is not None and is_web_pose(pose_landmarks):
