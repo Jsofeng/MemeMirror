@@ -80,14 +80,14 @@ def is_six_seven_pose(lm):
     if shoulder_width < 0.05:
         return False
 
-    hands_at_chest_level = (left_wrist.y > left_shoulder.y) and (right_wrist.y > right_shoulder.y)
+    hands_at_chest_level = (left_wrist.y > left_shoulder.y) and (right_wrist.y > right_shoulder.y) and abs(left_wrist.y - left_shoulder.y) < 0.25 and abs(right_wrist.y - right_shoulder.y) < 0.25
     if not hands_at_chest_level:
         return False
 
     wrist_height_diff = left_wrist.y - right_wrist.y
     sensitivity_threshold = shoulder_width * 0.10
 
-    return abs(wrist_height_diff) > sensitivity_threshold
+    return abs(wrist_height_diff) > sensitivity_threshold #has to be lower than the shoulders
 
 
 def detect_tongue(frame, face_landmarks):
