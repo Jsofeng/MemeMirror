@@ -10,7 +10,7 @@ MEMES = {
     "tongue_out": "images/nailong-tongue.jpg",
     "six_seven": "images/sixseven.jpg",
     "spooderman": "images/tbm.jpeg",
-    
+    "ishowspeed": "images/ishowspeed.jpg",
 }
 
 MEME_IMAGES = {}
@@ -19,6 +19,7 @@ for name, path in MEMES.items():
     if img is None:
         raise FileNotFoundError(f"Could not load meme image '{name}' from {path}")
     MEME_IMAGES[name] = cv.resize(img, (400, 400))  # resize once, up front
+    BLANK_MEME = np.zeros((400, 400, 3), dtype=np.uint8)
 
 # ---------------------------------------------------------------------------
 # MediaPipe setup
@@ -71,6 +72,36 @@ def is_web_pose(lm):
 
     return in_band(lw) and in_band(rw) and wrist_gap > 1.0 and fingers_ok
 
+def is_i_show_speed_mouth_open_pose(lm, fm):
+    """
+    - mouth open wide
+    - hands on head
+    """
+    try:
+        left_wrist, right_wrist = lm[L_WRIST], lm[R_WRIST]
+        top_lip, bottom_lip = fm[13], fm[14]
+        forehead, chin = fm[10], fm[152]
+        nose = fm[1]
+    except (IndexError, TypeError):
+        return False
+    
+    face_height = abs(forehead.y - chin.y)
+
+    if face_height == 0:
+        return False
+    
+    mouth_ratio = abs(top_lip.y - bottom_lip.y) / face_height
+
+    def is_mouth_open():
+        return mouth_ratio > 0.04 # Triggers when mouth opening is >10% of face height
+    
+
+    hands_on_head = (left_wrist.y < nose.y) and (right_wrist.y < nose.y)
+
+    if is_mouth_open() and hands_on_head:
+        return True
+
+    return False
 
 def is_six_seven_pose(lm):
     left_shoulder, right_shoulder = lm[L_SHOULDER], lm[R_SHOULDER]
@@ -128,13 +159,20 @@ def detect_tongue(frame, face_landmarks):
     return red_ratio > 0.35
 
 
-def evaluate_meme(pose_landmarks, tongue_detected):
+def evaluate_meme(pose_landmarks, face_landmarks, tongue_detected):
+    
+    if pose_landmarks is not None and face_landmarks is not None and is_i_show_speed_mouth_open_pose(pose_landmarks, face_landmarks):
+        return "ishowspeed"
+    
     if tongue_detected:
         return "tongue_out"
+    
     if pose_landmarks is not None and is_web_pose(pose_landmarks):
         return "spooderman"
+    
     if pose_landmarks is not None and is_six_seven_pose(pose_landmarks):
         return "six_seven"
+    
     return None
 
 
@@ -163,14 +201,16 @@ while cap.isOpened():
 
     face_landmarks = None
     tongue_detected = False
+
     if face_results.multi_face_landmarks:
         face_landmarks = face_results.multi_face_landmarks[0].landmark
         tongue_detected = detect_tongue(frame, face_landmarks)
 
-    meme_key = evaluate_meme(pose_landmarks, tongue_detected)
+    meme_key = evaluate_meme(pose_landmarks, face_landmarks, tongue_detected)
 
     if meme_key is not None:
-        cv.imshow("Meme", MEME_IMAGES[meme_key])
+        display_image = MEME_IMAGES[meme_key] if meme_key is not None else BLANK_MEME
+        cv.imshow("Meme", display_image)
     else:
         try:
             cv.destroyWindow("Meme")
