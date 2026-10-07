@@ -95,10 +95,9 @@ def is_i_show_speed_mouth_open_pose(lm, fm):
     def is_mouth_open():
         return mouth_ratio > 0.04 # Triggers when mouth opening is >10% of face height
     
+    hands_above_nose = (left_wrist.y < nose.y) and (right_wrist.y < nose.y)
 
-    hands_on_head = (left_wrist.y < nose.y) and (right_wrist.y < nose.y)
-
-    if is_mouth_open() and hands_on_head:
+    if is_mouth_open() and hands_above_nose:
         return True
 
     return False
@@ -160,7 +159,7 @@ def detect_tongue(frame, face_landmarks):
 
 
 def evaluate_meme(pose_landmarks, face_landmarks, tongue_detected):
-    
+
     if pose_landmarks is not None and face_landmarks is not None and is_i_show_speed_mouth_open_pose(pose_landmarks, face_landmarks):
         return "ishowspeed"
     
