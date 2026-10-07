@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const CameraStream = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
