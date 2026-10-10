@@ -1,13 +1,26 @@
 import { useEffect, useRef, useState } from "react";
 import { FaceLandmarker, PoseLandmarker, FilesetResolver, DrawingUtils } from "@mediapipe/tasks-vision";
+import { detectMeme, type MemeType } from "../utils/memeDetection";
 
 const MODEL_URL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
 const POSE_MODEL_URL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
 const WASM_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
 
-const CameraStream = () => {
+const MEME_IMAGES: Record<Exclude<MemeType, null>, string> = {
+  six_seven: "/images/sixseven.jpg",
+  spooderman: "/images/tbm.jpeg",
+  ishowspeed: "/images/ishowspeed.jpg",
+  tongue_out: "/images/nailong-tongue.jpg",
+};
+
+type CameraStreamProps = {
+  onMemeDetected: (meme: MemeType) => void;
+};
+
+const CameraStream = ({ onMemeDetected }: CameraStreamProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [detectedMeme, setDetectedMeme] = useState<MemeType>(null);
 
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState("Initializing...");
@@ -147,6 +160,11 @@ const CameraStream = () => {
 
               if (pose_results.landmarks.length > 0) {
                 const poseLandmarks = pose_results.landmarks[0];
+                
+                const meme = detectMeme(poseLandmarks);
+                setDetectedMeme(meme);
+                onMemeDetected(meme);
+
                   drawingUtils.drawConnectors(
                     poseLandmarks,
                     PoseLandmarker.POSE_CONNECTIONS,
@@ -163,6 +181,8 @@ const CameraStream = () => {
                   });
 
               } else {
+                setDetectedMeme(null);
+                onMemeDetected(null);
                 setStatus("Looking for a pose...");
               }
 
@@ -217,8 +237,6 @@ const CameraStream = () => {
       <p className="mb-3 text-sm">{status}</p>
 
       <div className="relative overflow-hidden rounded-xl">
-
-        {/* Actual browser camera */}
         <video
           ref={videoRef}
           autoPlay
@@ -226,7 +244,7 @@ const CameraStream = () => {
           muted
           className="hidden"
         />
-        {/* Video with facial landmarks drawn over it */}
+
         <canvas
           ref={canvasRef}
           className="h-auto w-full"
