@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
+import { FaceLandmarker, PoseLandmarker, FilesetResolver, DrawingUtils } from "@mediapipe/tasks-vision";
 
 const MODEL_URL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
-
+const POSE_MODEL_URL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
 const WASM_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
 
 const CameraStream = () => {
@@ -16,7 +16,8 @@ const CameraStream = () => {
   useEffect(() => {
 
     let stream: MediaStream | null = null;
-    let faceLandmarker: FaceLandmarker | null = null;
+    let face_landmarker: FaceLandmarker | null = null;
+    let pose_landmarker: PoseLandmarker | null = null;
     let animationId: number;
     let lastVideoTime = -1;
     let stopped = false;
@@ -24,7 +25,7 @@ const CameraStream = () => {
     async function startCamera() {
       try {
         // 1. Request camera permission & get MediaStream
-        const stream = await navigator.mediaDevices.getUserMedia({
+        stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: "user",
           },
@@ -56,7 +57,7 @@ const CameraStream = () => {
 
         const vision = await FilesetResolver.forVisionTasks(WASM_URL);
 
-        faceLandmarker = await FaceLandmarker.createFromOptions(
+        face_landmarker = await FaceLandmarker.createFromOptions(
           vision,
           {
             baseOptions: {
@@ -65,6 +66,18 @@ const CameraStream = () => {
             },
             runningMode: "VIDEO",
             numFaces: 1,
+          }
+        );
+
+        pose_landmarker = await PoseLandmarker.createFromOptions(
+          vision,
+          {
+            baseOptions: {
+              modelAssetPath: POSE_MODEL_URL,
+              delegate: "GPU",
+            },
+            runningMode: "VIDEO",
+            numPoses: 1,
           }
         );
 
@@ -87,10 +100,15 @@ const CameraStream = () => {
           if(video.currentTime !== lastVideoTime) {
             lastVideoTime = video.currentTime;
 
-            const results = faceLandmarker!.detectForVideo(
+            const face_results = face_landmarker!.detectForVideo(
               video,
               performance.now()
             );
+
+            const pose_results = pose_landmarker!.detectForVideo(
+              video,
+              performance.now()
+            )
 
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
@@ -103,12 +121,14 @@ const CameraStream = () => {
               canvas.height
             );
 
-            if (results.faceLandmarks.length > 0) {
+            const drawingUtils = new DrawingUtils(ctx);
 
-              const landmarks = results.faceLandmarks[0];
+            if (face_results.faceLandmarks.length > 0) {
+
+              const faceLandmarks = face_results.faceLandmarks[0];
               ctx.fillStyle = "#00FF00";
               
-              for (const landmark of landmarks) {
+              for (const landmark of faceLandmarks) {
                 ctx.beginPath();
               
                 ctx.arc(
@@ -120,14 +140,40 @@ const CameraStream = () => {
                 );
                 ctx.fill();
               }
-              
-              setStatus(
-                `Face detected: ${landmarks.length} landmarks`
-              );
 
             } else {
               setStatus("Looking for a face...");
             }
+
+              if (pose_results.landmarks.length > 0) {
+                const poseLandmarks = pose_results.landmarks[0];
+                  drawingUtils.drawConnectors(
+                    poseLandmarks,
+                    PoseLandmarker.POSE_CONNECTIONS,
+                    {
+                      color: "#00FFFF",
+                      lineWidth: 3,
+                    }
+                  );
+
+                  drawingUtils.drawLandmarks(poseLandmarks, {
+                    color: "#FF0000",
+                    lineWidth: 1,
+                    radius: 4,
+                  });
+
+              } else {
+                setStatus("Looking for a pose...");
+              }
+
+          const faceDetected = face_results.faceLandmarks.length > 0;
+          const poseDetected = pose_results.landmarks.length > 0;
+
+          setStatus(
+            `Face: ${faceDetected ? "Detected" : "Not detected"} | ` +
+            `Pose: ${poseDetected ? "Detected" : "Not detected"}`
+          );
+            
           }
           animationId = requestAnimationFrame(processFrame);
         }
@@ -154,7 +200,8 @@ const CameraStream = () => {
       stopped = true;
       cancelAnimationFrame(animationId);
       stream?.getTracks().forEach((track) => track.stop());
-      faceLandmarker?.close();
+      face_landmarker?.close();
+      pose_landmarker?.close();
     };
   }, []);
 
