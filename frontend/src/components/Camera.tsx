@@ -6,13 +6,6 @@ const MODEL_URL = "https://storage.googleapis.com/mediapipe-models/face_landmark
 const POSE_MODEL_URL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
 const WASM_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
 
-const MEME_IMAGES: Record<Exclude<MemeType, null>, string> = {
-  six_seven: "/images/sixseven.jpg",
-  spooderman: "/images/tbm.jpeg",
-  ishowspeed: "/images/ishowspeed.jpg",
-  tongue_out: "/images/nailong-tongue.jpg",
-};
-
 type CameraStreamProps = {
   onMemeDetected: (meme: MemeType) => void;
 };
@@ -20,7 +13,6 @@ type CameraStreamProps = {
 const CameraStream = ({ onMemeDetected }: CameraStreamProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [detectedMeme, setDetectedMeme] = useState<MemeType>(null);
 
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState("Initializing...");
@@ -162,7 +154,6 @@ const CameraStream = ({ onMemeDetected }: CameraStreamProps) => {
                 const poseLandmarks = pose_results.landmarks[0];
                 
                 const meme = detectMeme(poseLandmarks);
-                setDetectedMeme(meme);
                 onMemeDetected(meme);
 
                   drawingUtils.drawConnectors(
@@ -181,7 +172,6 @@ const CameraStream = ({ onMemeDetected }: CameraStreamProps) => {
                   });
 
               } else {
-                setDetectedMeme(null);
                 onMemeDetected(null);
                 setStatus("Looking for a pose...");
               }
@@ -226,30 +216,26 @@ const CameraStream = ({ onMemeDetected }: CameraStreamProps) => {
   }, []);
 
   return (
-    <div className="mx-auto mt-5 max-w-2xl text-center">
-      <h2 className="mb-3 text-xl font-semibold">
-        MemeMirror
-      </h2>
+    <div className="relative">
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted
+        className="hidden"
+      />
+
+      <canvas ref={canvasRef} className="block h-auto w-full" />
+
       {error && (
-        <p className="mb-3 text-red-500">{error}</p>
+        <p className="absolute inset-x-4 top-12 rounded bg-black/60 px-3 py-2 text-sm text-red-400">
+          {error}
+        </p>
       )}
 
-      <p className="mb-3 text-sm">{status}</p>
-
-      <div className="relative overflow-hidden rounded-xl">
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted
-          className="hidden"
-        />
-
-        <canvas
-          ref={canvasRef}
-          className="h-auto w-full"
-        />
-      </div>
+      <p className="absolute bottom-3 left-4 rounded bg-black/50 px-2 py-1 text-xs text-zinc-300">
+        {status}
+      </p>
     </div>
   );
 };

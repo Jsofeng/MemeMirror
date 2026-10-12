@@ -1,5 +1,3 @@
-import type { PoseLandmarker, FaceLandmarker } from "@mediapipe/tasks-vision";
-
 export type MemeType = 
   | "six_seven"
   | "spooderman"
@@ -52,4 +50,3 @@ export function detectMeme(poseLandmarks: Landmark[],) : MemeType {
 
     return null;
 }
-
