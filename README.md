@@ -4,7 +4,7 @@ Strike a pose and get a meme.
 
 MemeMirror watches your webcam, tracks your body and face, and when you copy a meme pose it pulls up the matching meme.
 
-![MemeMirror]()
+![MemeMirror](frontend/src/assets/ui-preview.svg)
 
 ### Web
 
