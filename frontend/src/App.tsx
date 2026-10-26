@@ -1,13 +1,13 @@
 import CameraStream from "./components/Camera";
 import { useState } from "react";
-import type { MemeType } from "./utils/memeDetection";
+import { type MemeType } from "./memes";
 import defaultCat from "./assets/default-cat.jpg";
 
 const MEME_IMAGES: Record<Exclude<MemeType, null>, string> = {
   six_seven: "/images/sixseven.jpg",
   spooderman: "/images/tbm.jpeg",
   ishowspeed: "/images/ishowspeed.jpg",
-  tongue_out: "/images/nailong-tongue.jpg",
+  nailong: "/images/nailong-tongue.jpg",
 };
 
 function App() {

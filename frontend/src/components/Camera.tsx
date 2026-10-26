@@ -1,10 +1,21 @@
 import { useEffect, useRef, useState } from "react";
-import { FaceLandmarker, PoseLandmarker, FilesetResolver, DrawingUtils } from "@mediapipe/tasks-vision";
+import {
+  FaceLandmarker,
+  PoseLandmarker,
+  FilesetResolver,
+  DrawingUtils,
+} from "@mediapipe/tasks-vision";
+
 import { detectMeme, type MemeType } from "../utils/memeDetection";
 
-const MODEL_URL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
-const POSE_MODEL_URL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
-const WASM_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
+const MODEL_URL =
+  "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
+
+const POSE_MODEL_URL =
+  "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
+
+const WASM_URL =
+  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
 
 type CameraStreamProps = {
   onMemeDetected: (meme: MemeType) => void;
@@ -17,24 +28,22 @@ const CameraStream = ({ onMemeDetected }: CameraStreamProps) => {
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState("Initializing...");
 
-
   useEffect(() => {
-
     let stream: MediaStream | null = null;
-    let face_landmarker: FaceLandmarker | null = null;
-    let pose_landmarker: PoseLandmarker | null = null;
-    let animationId: number;
+    let faceLandmarker: FaceLandmarker | null = null;
+    let poseLandmarker: PoseLandmarker | null = null;
+    let animationId: number | null = null;
     let lastVideoTime = -1;
     let stopped = false;
 
     async function startCamera() {
       try {
-        // 1. Request camera permission & get MediaStream
+        // 1. Request camera permission.
         stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: "user",
           },
-          audio: false, // Set to true if you need microphone access
+          audio: false,
         });
 
         if (stopped) {
@@ -44,176 +53,205 @@ const CameraStream = ({ onMemeDetected }: CameraStreamProps) => {
 
         const video = videoRef.current;
 
-        if(!video) {
+        if (!video) {
           throw new Error("Video element not found.");
         }
 
         video.srcObject = stream;
 
-        await new Promise<void>((resolve) => {
-          if(video.readyState >= 2) {
+        // 2. Wait until the video has loaded.
+        await new Promise<void>((resolve, reject) => {
+          if (video.readyState >= 2) {
             resolve();
-          } else {
-            video.onloadeddata = () => resolve();
+            return;
           }
+
+          video.onloadeddata = () => resolve();
+          video.onerror = () => reject(new Error("Failed to load webcam video."));
         });
 
         await video.play();
 
+        if (stopped) return;
+
+        // 3. Load MediaPipe.
         const vision = await FilesetResolver.forVisionTasks(WASM_URL);
 
-        face_landmarker = await FaceLandmarker.createFromOptions(
-          vision,
-          {
-            baseOptions: {
-              modelAssetPath: MODEL_URL,
-              delegate: "GPU",
-            },
-            runningMode: "VIDEO",
-            numFaces: 1,
-          }
-        );
+        faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath: MODEL_URL,
+            delegate: "GPU",
+          },
+          runningMode: "VIDEO",
+          numFaces: 1,
+        });
 
-        pose_landmarker = await PoseLandmarker.createFromOptions(
-          vision,
-          {
-            baseOptions: {
-              modelAssetPath: POSE_MODEL_URL,
-              delegate: "GPU",
-            },
-            runningMode: "VIDEO",
-            numPoses: 1,
-          }
-        );
+        if (stopped) {
+          faceLandmarker.close();
+          faceLandmarker = null;
+          return;
+        }
 
-        if(stopped) return;
+        poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath: POSE_MODEL_URL,
+            delegate: "GPU",
+          },
+          runningMode: "VIDEO",
+          numPoses: 1,
+        });
+
+        if (stopped) return;
 
         setStatus("Camera and MediaPipe ready");
 
+        // 4. Process webcam frames.
         function processFrame() {
           if (stopped || !videoRef.current) return;
 
-          const video = videoRef.current;
+          const currentVideo = videoRef.current;
           const canvas = canvasRef.current;
           const ctx = canvas?.getContext("2d");
 
-          if (!canvas || !ctx || video.readyState < 2) {
+          if (!canvas || !ctx || currentVideo.readyState < 2) {
             animationId = requestAnimationFrame(processFrame);
             return;
           }
 
-          if(video.currentTime !== lastVideoTime) {
-            lastVideoTime = video.currentTime;
+          if (currentVideo.currentTime !== lastVideoTime) {
+            lastVideoTime = currentVideo.currentTime;
 
-            const face_results = face_landmarker!.detectForVideo(
-              video,
-              performance.now()
-            );
-
-            const pose_results = pose_landmarker!.detectForVideo(
-              video,
-              performance.now()
-            )
-
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
+            // Keep canvas dimensions in sync with the webcam.
+            if (
+              canvas.width !== currentVideo.videoWidth ||
+              canvas.height !== currentVideo.videoHeight
+            ) {
+              canvas.width = currentVideo.videoWidth;
+              canvas.height = currentVideo.videoHeight;
+            }
 
             ctx.drawImage(
-              video,
+              currentVideo,
               0,
               0,
               canvas.width,
-              canvas.height
+              canvas.height,
+            );
+
+            // Use one timestamp for both MediaPipe detectors.
+            const timestamp = performance.now();
+
+            const faceResults = faceLandmarker!.detectForVideo(
+              currentVideo,
+              timestamp,
+            );
+
+            const poseResults = poseLandmarker!.detectForVideo(
+              currentVideo,
+              timestamp,
             );
 
             const drawingUtils = new DrawingUtils(ctx);
 
-            if (face_results.faceLandmarks.length > 0) {
+            // 5. Get face landmarks, if available.
+            const faceLandmarks =
+              faceResults.faceLandmarks.length > 0
+                ? faceResults.faceLandmarks[0]
+                : undefined;
 
-              const faceLandmarks = face_results.faceLandmarks[0];
+            if (faceLandmarks) {
               ctx.fillStyle = "#00FF00";
-              
+
               for (const landmark of faceLandmarks) {
                 ctx.beginPath();
-              
+
                 ctx.arc(
                   landmark.x * canvas.width,
                   landmark.y * canvas.height,
                   1.5,
                   0,
-                  2 * Math.PI
+                  2 * Math.PI,
                 );
+
                 ctx.fill();
               }
-
-            } else {
-              setStatus("Looking for a face...");
             }
 
-              if (pose_results.landmarks.length > 0) {
-                const poseLandmarks = pose_results.landmarks[0];
-                
-                const meme = detectMeme(poseLandmarks);
-                onMemeDetected(meme);
+            // 6. Get pose landmarks and detect a meme.
+            const poseLandmarks =
+              poseResults.landmarks.length > 0
+                ? poseResults.landmarks[0]
+                : undefined;
 
-                  drawingUtils.drawConnectors(
-                    poseLandmarks,
-                    PoseLandmarker.POSE_CONNECTIONS,
-                    {
-                      color: "#00FFFF",
-                      lineWidth: 3,
-                    }
-                  );
+            if (poseLandmarks) {
+              // Pass BOTH body and face landmarks.
+              const meme = detectMeme(poseLandmarks, faceLandmarks);
 
-                  drawingUtils.drawLandmarks(poseLandmarks, {
-                    color: "#FF0000",
-                    lineWidth: 1,
-                    radius: 4,
-                  });
+              onMemeDetected(meme);
 
-              } else {
-                onMemeDetected(null);
-                setStatus("Looking for a pose...");
-              }
+              drawingUtils.drawConnectors(
+                poseLandmarks,
+                PoseLandmarker.POSE_CONNECTIONS,
+                {
+                  color: "#00FFFF",
+                  lineWidth: 3,
+                },
+              );
 
-          const faceDetected = face_results.faceLandmarks.length > 0;
-          const poseDetected = pose_results.landmarks.length > 0;
+              drawingUtils.drawLandmarks(poseLandmarks, {
+                color: "#FF0000",
+                lineWidth: 1,
+                radius: 4,
+              });
+            } else {
+              // No pose means no current meme match.
+              onMemeDetected(null);
+            }
 
-          setStatus(
-            `Face: ${faceDetected ? "Detected" : "Not detected"} | ` +
-            `Pose: ${poseDetected ? "Detected" : "Not detected"}`
-          );
-            
+            // 7. Update the status once per processed frame.
+            const faceDetected = faceLandmarks !== undefined;
+            const poseDetected = poseLandmarks !== undefined;
+
+            setStatus(
+              `Face: ${faceDetected ? "Detected" : "Not detected"} | ` +
+                `Pose: ${poseDetected ? "Detected" : "Not detected"}`,
+            );
           }
+
           animationId = requestAnimationFrame(processFrame);
         }
 
         processFrame();
+      } catch (err) {
+        console.error("Camera or MediaPipe initialization failed:", err);
 
-
-    } catch (err) {
-      console.error("Camera or MediaPipe initialization failed:", err); 
         if (!stopped) {
           setError(
             err instanceof Error
               ? err.message
-              : "Could not initialize the camera or MediaPipe."
+              : "Could not initialize the camera or MediaPipe.",
           );
+
+          onMemeDetected(null);
         }
+      }
     }
 
-  }
+    startCamera();
 
-  startCamera();
-
-  return () => { 
+    return () => {
       stopped = true;
-      cancelAnimationFrame(animationId);
+
+      if (animationId !== null) {
+        cancelAnimationFrame(animationId);
+      }
+
       stream?.getTracks().forEach((track) => track.stop());
-      face_landmarker?.close();
-      pose_landmarker?.close();
+
+      faceLandmarker?.close();
+      poseLandmarker?.close();
     };
-  }, []);
+  }, [onMemeDetected]);
 
   return (
     <div className="relative">
