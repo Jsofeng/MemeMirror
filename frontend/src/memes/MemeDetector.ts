@@ -17,5 +17,6 @@ export interface MemeDetector {
   detect(
     poseLandmarks: Landmark[],
     faceLandmarks?: Landmark[],
+    frame?: HTMLCanvasElement,
   ): boolean;
 }

@@ -22,10 +22,11 @@ const detectors = [
 export function detectMeme(
   poseLandmarks: Landmark[],
   faceLandmarks?: Landmark[],
+  frame?: HTMLCanvasElement,
 ): MemeType | null {
 
   for (const detector of detectors) {
-    if (detector.detect(poseLandmarks, faceLandmarks)) {
+    if (detector.detect(poseLandmarks, faceLandmarks, frame)) {
       return detector.memeType;
     }
   }

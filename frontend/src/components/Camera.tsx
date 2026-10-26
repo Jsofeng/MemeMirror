@@ -185,7 +185,7 @@ const CameraStream = ({ onMemeDetected }: CameraStreamProps) => {
 
             if (poseLandmarks) {
               // Pass BOTH body and face landmarks.
-              const meme = detectMeme(poseLandmarks, faceLandmarks);
+              const meme = detectMeme(poseLandmarks, faceLandmarks, canvas);
 
               onMemeDetected(meme);
 
